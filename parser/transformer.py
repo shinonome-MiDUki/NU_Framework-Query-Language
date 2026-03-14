@@ -5,6 +5,9 @@ with open(r"/Users/shiinaayame/Documents/NU_Framework_Query_Language_Proj/NU_Fra
 
 
 class NUQLTransformer(Transformer):
+    def start(self, children):
+        return children
+    
     def inclusion(self, children):
         return str(children[0])
     
@@ -18,10 +21,10 @@ class NUQLTransformer(Transformer):
                              all(isinstance(x, str) for x in c)), [])
         clu_name     = next((c for c in children if isinstance(c, str) and c not in
                              ("clu", "<<", ">>")), None)
-        inheritance  = next((c for c in children if isinstance(c, list) and
-                     any(hasattr(x, 'data') for x in c)), None)
-        data         = next((c for c in children if isinstance(c, list) and
-                            c is not modifier and c is not inheritance), None)
+        inheritance = next((c for c in children if isinstance(c, list) and
+                    all(isinstance(x, list) for x in c)), None)
+        data        = next((c for c in children if isinstance(c, list) and
+                    c is not modifier and c is not inheritance), None)
         return {
             "modifier":    modifier,
             "clu_name":    clu_name,
@@ -174,14 +177,12 @@ class NUQLTransformer(Transformer):
         return None
 
     def oneway_pair(self, children):
-        print("oneway children:", children)
         sep = next(i for i, c in enumerate(children) if str(c) == "=" and str(c) != "==")
         lhs = self._resolve_value(children, 0)
         rhs = self._resolve_value(children, sep + 1)
         return {"lhs": lhs, "rhs": rhs}
 
     def twoway_pair(self, children):
-        print("twoway children:", children)
         sep = next(i for i, c in enumerate(children) if str(c) == "==" and str(c) != "=")
         lhs = self._resolve_value(children, 0)
         rhs_tokens = children[sep + 1:]
@@ -272,3 +273,4 @@ with open(r"/Users/shiinaayame/Documents/NU_Framework_Query_Language_Proj/NU_Fra
 from pprint import pprint
 pprint("=== Parsed NUQL ===")
 pprint(parse_nuql(sample_nuql), width=120)
+pprint(type(parse_nuql(sample_nuql)))
