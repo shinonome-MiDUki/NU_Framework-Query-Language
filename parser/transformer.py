@@ -1,4 +1,4 @@
-from lark import Lark, Transformer, Token
+from lark import Lark, Transformer, Token, Tree
 
 with open(r"/Users/shiinaayame/Documents/NU_Framework_Query_Language_Proj/NU_Framework-Query-Language/syntax/nuql_syntax.lark", "r", encoding="utf-8") as syn:
     nuql_grammar = syn.read()
@@ -18,9 +18,10 @@ class NUQLTransformer(Transformer):
                              all(isinstance(x, str) for x in c)), [])
         clu_name     = next((c for c in children if isinstance(c, str) and c not in
                              ("clu", "<<", ">>")), None)
-        inheritance  = next((c for c in children if isinstance(c, list) and c is not modifier), None)
+        inheritance  = next((c for c in children if isinstance(c, list) and
+                     any(hasattr(x, 'data') for x in c)), None)
         data         = next((c for c in children if isinstance(c, list) and
-                             c is not modifier and c is not inheritance), None)
+                            c is not modifier and c is not inheritance), None)
         return {
             "modifier":    modifier,
             "clu_name":    clu_name,
@@ -52,6 +53,9 @@ class NUQLTransformer(Transformer):
     
     def IS_REJECTED(self, token):
         return str(token)
+    
+    def inheritance(self, children):
+        return [str(c) for c in children]
     
     def inheritance_list(self, children):
         inner = children[1:-1]
@@ -112,8 +116,20 @@ class NUQLTransformer(Transformer):
         if isinstance(c, Token) and c.type == "STRING":
             return {"type": "str", "value": s[1:-1]}
 
-        if isinstance(c, Token) and c.type == "STRCIT_STRING":
+        if isinstance(c, Token) and c.type == "STRICT_STRING":
             return {"type": "sstr", "value": s[1:-1]}
+        
+        if isinstance(c, Tree):
+            rule = c.data if isinstance(c.data, str) else str(c.data)
+            if rule == "identifiable_value":
+                return {"type": "id", "value": str(c.children[1])}
+            if rule == "logical_value":
+                raw = str(c.children[1])
+                return {"type": "num", "value": float(raw) if "." in raw else int(raw)}
+            if rule == "collection_value":
+                items = [NUQLTransformer._resolve_value([ch]) for ch in c.children
+                        if isinstance(ch, Token) and ch.type == "STRING"]
+                return {"type": "set", "value": set(it["value"] for it in items if it)}
 
         if isinstance(c, dict):
             return c
@@ -125,7 +141,7 @@ class NUQLTransformer(Transformer):
             raw = str(children[start_index + 1])
             return {"type": "num", "value": float(raw) if "." in raw else int(raw)}
 
-        if s == "%" and start_index + 1 < len(children):
+        if s == "/" and start_index + 1 < len(children):
             nxt = str(children[start_index + 1])
             if nxt in ("true", "false"):
                 return {"type": "bool", "value": nxt == "true"}
@@ -158,13 +174,15 @@ class NUQLTransformer(Transformer):
         return None
 
     def oneway_pair(self, children):
-        sep = next(i for i, c in enumerate(children) if str(c) == "=")
+        print("oneway children:", children)
+        sep = next(i for i, c in enumerate(children) if str(c) == "=" and str(c) != "==")
         lhs = self._resolve_value(children, 0)
         rhs = self._resolve_value(children, sep + 1)
         return {"lhs": lhs, "rhs": rhs}
 
     def twoway_pair(self, children):
-        sep = next(i for i, c in enumerate(children) if str(c) == "==")
+        print("twoway children:", children)
+        sep = next(i for i, c in enumerate(children) if str(c) == "==" and str(c) != "=")
         lhs = self._resolve_value(children, 0)
         rhs_tokens = children[sep + 1:]
         rhs = []
@@ -178,6 +196,24 @@ class NUQLTransformer(Transformer):
                 rhs.append(val)
             i += 1
         return {"lhs": lhs, "rhs": rhs}
+    
+    def identifiable_value(self, children):
+        if str(children[0]) == "#":
+            return {"type": "id", "value": str(children[1])}
+        return children[0] 
+
+    def logical_value(self, children):
+        raw = str(children[1])
+        return {"type": "num", "value": float(raw) if "." in raw else int(raw)}
+    
+    def flexible_value(self, children):
+        if str(children[0]) == "r{":
+            return {"type": "regex", "value": str(children[1])}
+        return {"type": "fstring", "value": str(children[1])}
+
+    def collection_value(self, children):
+        items = [ch for ch in children if isinstance(ch, Token) and ch.type == "STRING"]
+        return {"type": "set", "value": set(str(it)[1:-1] for it in items)}
 
     def injected_type(self, children):
         if str(children[0]) == "inj" and str(children[1]) == ".":
@@ -207,9 +243,6 @@ class NUQLTransformer(Transformer):
     def NAME(self, token):
         return str(token)
     
-    def PATH(self, token):
-        return str(token)
-    
     def EXTENSION(self, token):
         return str(token)
     
@@ -236,4 +269,6 @@ def parse_nuql(text):
 
 with open(r"/Users/shiinaayame/Documents/NU_Framework_Query_Language_Proj/NU_Framework-Query-Language/official_sample/sample.nuql", "r", encoding="utf-8") as f:
     sample_nuql = f.read()
-print(parse_nuql(sample_nuql))
+from pprint import pprint
+pprint("=== Parsed NUQL ===")
+pprint(parse_nuql(sample_nuql), width=120)

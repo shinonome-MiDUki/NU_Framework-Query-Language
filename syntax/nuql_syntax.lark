@@ -2,9 +2,9 @@
 
 ?start: (mode_spec)? (cluster | meta_cluster | inclusion)*
 
-inclusion: "<include" PATH ">"
-         | "<append" PATH ">"
-         | "<prepend" PATH ">"
+inclusion: "<include" /[^>]+/ ">"
+         | "<append" /[^>]+/ ">"
+         | "<prepend" /[^>]+/ ">"
 
 mode_spec: "<--" "NUQL" ("1.0")? ("cc" | "ncc") "-->"
 
@@ -26,9 +26,9 @@ PROTECTED: "!"
 SIDEWAY: "/"  
 ONE_WAY: "="
 TWO_WAY: "=="
-COMMA: ","
-COLON: ";"
-STROKE: "|"
+_COMMA: ","
+_COLON: ";"
+_STROKE: "|"
 
 content: ((datum | group) (_COLON (datum | group))*)?
 header_content: (header_datum (_COLON header_datum)*)?
@@ -40,17 +40,17 @@ oneway_pair: identifiable_value ONE_WAY (identifiable_value | logical_value | fl
 twoway_pair: identifiable_value TWO_WAY (identifiable_value (_STROKE identifiable_value)*)
 
 ?identifiable_value: STRING 
-                   | STRCIT_STRING 
+                   | STRICT_STRING 
                    | "#" IDENTIFIER      
              
 ?logical_value: "@" NUMBER         
-                | "%" true | "%" false  
+                | "/" "true" | "/" "false"
 
-?flexible_value: | "r" "{" /.+?/ "}"          
+?flexible_value: | "r{" /.+?/ "}"          
                  | "%" /.+?/ "%"          
 
-?collection_value: "s" "{" ((identifiable_value | logical_value) (_COMMA (identifiable_value | logical_value))*)? "}" 
-                 | "j" "{" (JSON_CONTENT | "^" PATH) "}"    
+?collection_value: "s{" ((identifiable_value | logical_value) (_COMMA (identifiable_value | logical_value))*)? "}" 
+                 | "j{" (JSON_CONTENT | "^" /[^}]+/) "}" 
 
 injected_type: "inj" "." EXTENSION TYPE_NAME IDENTIFIER
 
@@ -58,11 +58,10 @@ group: "$" NAME "$" (datum)+ "$$"
 
 IDENTIFIER: /[a-zA-Z0-9_]+/
 NAME: IDENTIFIER
-PATH: /[^>]+/
 EXTENSION: IDENTIFIER
 TYPE_NAME: IDENTIFIER
 STRING: /'[^= \n\t\r<>!$"']+'/  
-STRCIT_STRING: /"[^= \n\t\r<>!$"]+"/ 
+STRICT_STRING: /"[^=\n\t\r<>!$"]+"/ 
 JSON_CONTENT: /\{.+?\}/s
 
 %import common.WS
@@ -71,3 +70,4 @@ JSON_CONTENT: /\{.+?\}/s
 %ignore "_"
 COMMENT: "|++" /(.|\n)+?/ "++|"
 %ignore COMMENT
+
