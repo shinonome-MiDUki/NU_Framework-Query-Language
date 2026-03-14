@@ -1,4 +1,4 @@
-from lark import Lark, Transformer
+from lark import Lark, Transformer, Token
 
 with open(r"/Users/shiinaayame/Documents/NU_Framework_Query_Language_Proj/NU_Framework-Query-Language/syntax/nuql_syntax.lark", "r", encoding="utf-8") as syn:
     nuql_grammar = syn.read()
@@ -9,20 +9,23 @@ class NUQLTransformer(Transformer):
         return str(children[0])
     
     def mode_spec(self, children):
-        version = str(children[2])
-        mode = str(children[3])
+        version = str(children[2]) if len(children) > 2 else None
+        mode    = str(children[3]) if len(children) > 3 else None
         return version, mode
 
     def cluster(self, children):
-        modifier = children[0] if isinstance(children[0], list) else []
-        clu_name = str(children[2])
-        inheritance = children[3]
-        data = children[-2] 
+        modifier     = next((c for c in children if isinstance(c, list) and
+                             all(isinstance(x, str) for x in c)), [])
+        clu_name     = next((c for c in children if isinstance(c, str) and c not in
+                             ("clu", "<<", ">>")), None)
+        inheritance  = next((c for c in children if isinstance(c, list) and c is not modifier), None)
+        data         = next((c for c in children if isinstance(c, list) and
+                             c is not modifier and c is not inheritance), None)
         return {
-            "modifier": modifier,
-            "clu_name": clu_name,
+            "modifier":    modifier,
+            "clu_name":    clu_name,
             "inheritance": inheritance,
-            "data": data
+            "data":        data
         }
 
     def meta_cluster(self, children):
@@ -47,31 +50,18 @@ class NUQLTransformer(Transformer):
     def IS_PRIME(self, token):
         return str(token)
     
-    def RESERVE(self, token):
-        return str(token)
-    
     def IS_REJECTED(self, token):
         return str(token)
     
-    def inheritance(self, children):
-        if len(children) > 1:
-            modifiers = [str(token) for token in children[:-1] if isinstance(token, str)]
-            inheritance_name = str(children[-1])
-            return modifiers, inheritance_name
-        else:
-            return [], str(children[0])
-    
     def inheritance_list(self, children):
-        if len(children) > 3:
-            return children[1:-1]  
-        else:
-            return []
+        inner = children[1:-1]
+        return [c for c in inner if str(c) != ","]
         
     def diff(self, children):
-        diff_name = str(children[2])
+        diff_name    = str(children[2])
         diff_content = children[-2]
         return {
-            "diff_name": diff_name,
+            "diff_name":    diff_name,
             "diff_content": diff_content
         }
     
@@ -90,12 +80,6 @@ class NUQLTransformer(Transformer):
     def TWO_WAY(self, token):
         return str(token)
 
-    def COMMA(self, token):
-        return str(token)
-    
-    def COLON(self, token):
-        return str(token)
-    
     def content(self, children):
         return [child for child in children if isinstance(child, dict)]
     
@@ -113,83 +97,98 @@ class NUQLTransformer(Transformer):
             "pair": pair
         }
 
-    def oneway_pair(self, children):
-        lhs = str(children[0])
-        rhs = str(children[2])
-        return {
-            "lhs": lhs,
-            "rhs": rhs
-        }
-    
-    def twoway_pair(self, children):
-        lhs = str(children[0])
-        rhs = [str(token) for token in children[2:]]
-        return {
-            "lhs": lhs,
-            "rhs": rhs
-        }
-    
-    def identifiable_value(self, children):
-        return {
-            "type": "id",
-            "value": str(children[-1])
-        }
+    @staticmethod
+    def _resolve_value(children, start_index=0):
+        """
+        CHANGE 3: `?` 付きルール（identifiable_value / logical_value /
+        flexible_value / collection_value）はLarkによりインライン展開されるため、
+        Transformerメソッドとして捕捉できない。
+        このヘルパーで各 one-way / two-way ペアのオペランドを直接解釈する。
+        children はルール全体の子リスト、start_index は解釈開始位置。
+        """
+        c = children[start_index]
+        s = str(c)
 
-    def logical_value(self, children):
-        if children[0] == "%":
-            data_type = "bool"
-            data_value = children[-1] == "true"
-        elif children[0] == "%":
-            data_type = "num"
-            data_value = str(children[-1])
-            data_value = float(data_value) if "." in data_value else int(data_value)
-        else:
-            return None
-        return {
-            "type" : data_type,
-            "value": data_value
-        }
-    
-    def flexible_value(self, children):
-        if children[0] == "r" and children[1] == "{" and children[-1] == "}":
-            data_type = "regex"
-            data_value = str(children[-2])
-        elif children[0] == "%" and children[-1] == "%":
-            data_type = "fstring"
-            data_value = str(children[-2])
-        else:
-            return None
-        return {
-            "type" : data_type,
-            "value": data_value
-        }
-    
-    def collection_value(self, children):
-        if children[1] != "{" or children[-1] != "}":
-            return None
-        if children[0] == "s":
-            data_type = "set"
-            data_value = set([token["value"] for token in children[2:-1]])
-        elif children[0] == "j":
-            data_type = "json"
-            data_value = str(children[-2])
-        else:
-            return None
-        return {
-            "type" : data_type,
-            "value" : data_value
-        }
-    
+        if isinstance(c, Token) and c.type == "STRING":
+            return {"type": "str", "value": s[1:-1]}
+
+        if isinstance(c, Token) and c.type == "STRCIT_STRING":
+            return {"type": "sstr", "value": s[1:-1]}
+
+        if isinstance(c, dict):
+            return c
+
+        if s == "#" and start_index + 1 < len(children):
+            return {"type": "id", "value": str(children[start_index + 1])}
+
+        if s == "@" and start_index + 1 < len(children):
+            raw = str(children[start_index + 1])
+            return {"type": "num", "value": float(raw) if "." in raw else int(raw)}
+
+        if s == "%" and start_index + 1 < len(children):
+            nxt = str(children[start_index + 1])
+            if nxt in ("true", "false"):
+                return {"type": "bool", "value": nxt == "true"}
+
+        if s == "r{" and start_index + 1 < len(children):
+            return {"type": "regex", "value": str(children[start_index + 1])}
+
+        if s == "%" and start_index + 1 < len(children):
+            return {"type": "fstring", "value": str(children[start_index + 1])}
+
+        if s == "s{":
+            items = []
+            i = start_index + 1
+            while i < len(children) and str(children[i]) != "}":
+                item = NUQLTransformer._resolve_value(children, i)
+                if item:
+                    items.append(item)
+                i += 1
+            return {"type": "set", "value": set(it["value"] for it in items if isinstance(it, dict))}
+
+        if s == "j{":
+            nxt = children[start_index + 1]
+            if str(nxt) == "^":
+                return {"type": "json", "value": str(children[start_index + 2])}
+            return {"type": "json", "value": str(nxt)}
+
+        if isinstance(c, Token) and c.type in ("IDENTIFIER", "NAME"):
+            return {"type": "id", "value": s}
+
+        return None
+
+    def oneway_pair(self, children):
+        sep = next(i for i, c in enumerate(children) if str(c) == "=")
+        lhs = self._resolve_value(children, 0)
+        rhs = self._resolve_value(children, sep + 1)
+        return {"lhs": lhs, "rhs": rhs}
+
+    def twoway_pair(self, children):
+        sep = next(i for i, c in enumerate(children) if str(c) == "==")
+        lhs = self._resolve_value(children, 0)
+        rhs_tokens = children[sep + 1:]
+        rhs = []
+        i = 0
+        while i < len(rhs_tokens):
+            if str(rhs_tokens[i]) == "|":
+                i += 1
+                continue
+            val = self._resolve_value(rhs_tokens, i)
+            if val:
+                rhs.append(val)
+            i += 1
+        return {"lhs": lhs, "rhs": rhs}
+
     def injected_type(self, children):
-        if children[0] == "inj" and children[1] == ".":
+        if str(children[0]) == "inj" and str(children[1]) == ".":
             extension = str(children[2])
             type_name = str(children[3])
-            value = str(children[4])
+            value     = str(children[4])
             return {
-                "type": "injected",
+                "type":      "injected",
                 "extension": extension,
                 "type_name": type_name,
-                "value": value
+                "value":     value
             }
         else:
             return None
@@ -203,10 +202,7 @@ class NUQLTransformer(Transformer):
         }
     
     def IDENTIFIER(self, token):
-        return {
-            "type": "id",
-            "value": str(token)
-        }
+        return str(token)
     
     def NAME(self, token):
         return str(token)
@@ -221,16 +217,10 @@ class NUQLTransformer(Transformer):
         return str(token)
     
     def STRING(self, token):
-        return {
-            "type": "str",
-            "value": str(token)[1:-1]
-        }
+        return token  
     
-    def STRCIT_STRING(self, token):
-        return {
-            "type": "sstr",
-            "value": str(token)[1:-1]
-        }
+    def STRICT_STRING(self, token):
+        return token 
     
     def JSON_CONTENT(self, token):
         return str(token)
@@ -239,12 +229,11 @@ class NUQLTransformer(Transformer):
         return None
 
 def parse_nuql(text):
-    parser = Lark(nuql_grammar, start='start', parser='lalr')
+    parser = Lark(nuql_grammar, start='start', parser='lalr', keep_all_tokens=True)
     tree = parser.parse(text)
     result = NUQLTransformer().transform(tree)
     return result
 
-# テスト実行
 with open(r"/Users/shiinaayame/Documents/NU_Framework_Query_Language_Proj/NU_Framework-Query-Language/official_sample/sample.nuql", "r", encoding="utf-8") as f:
     sample_nuql = f.read()
 print(parse_nuql(sample_nuql))
