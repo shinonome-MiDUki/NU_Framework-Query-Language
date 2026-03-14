@@ -6,19 +6,18 @@ inclusion: "<include" PATH ">"
          | "<append" PATH ">"
          | "<prepend" PATH ">"
 
-mode_spec: "<--NUQL 1.0" ("cc" | "ncc")? "-->"
+mode_spec: "<--" "NUQL" ("1.0")? ("cc" | "ncc")? "-->"
 
-cluster: [cluster_modifier] "clu" NAME [inheritance_list] "<<" content ">>"
-       | [cluster_modifier] "clu" NAME [inheritance_list] "<<" diff_cluster ">>"
+cluster: [cluster_modifier] "clu" NAME [inheritance_list] "<<" (content | diff_cluster) ">>"
 meta_cluster: ("meta" | "wmeta") "clu" "<<" content ">>" 
 header_cluster: "&" "clu" NAME "<<" header_content ">>"  
-cluster_modifier: (([IS_PRIME] [IS_REJECTED]) | ([IS_REJECTED] [IS_PRIME]))*
+cluster_modifier: (IS_PRIME | IS_REJECTED)* 
 
 IS_PRIME: "*" 
 IS_REJECTED: "rejected"
 inheritance_list: "(" (["?"] [IS_PRIME] NAME ("," [IS_PRIME] NAME)*)? ")"
 
-diff_cluster = (":: diff" NAME "<~~" content "~~>")*
+diff_cluster: (":: diff" NAME "<~~" content "~~>")+
 
 PROTECTED: "!"   
 SIDEWAY: "/"    
@@ -29,38 +28,40 @@ content: ((datum | group) (";" (datum | group))*)?
 header_content: (header_datum (";" header_datum)*)?
 datum: [datum_modifiers] (oneway_pair | twoway_pair)
 header_datum: identifiable_value (ONE_WAY | TWO_WAY)
-datum_modifiers: (([PROTECTED] [SIDEWAY]) | ([SIDEWAY] [PROTECTED]))*
+datum_modifiers: (PROTECTED | SIDEWAY)*
 
 oneway_pair: identifiable_value ONE_WAY (identifiable_value | logical_value | flexible_value | collection_value | injected_type)
 twoway_pair: identifiable_value TWO_WAY (identifiable_value ("|" identifiable_value)*)?
 
 ?identifiable_value: STRING 
-                   | "#" identifier       
+                   | STRCIT_STRING 
+                   | "#" IDENTIFIER      
              
 ?logical_value: "@" NUMBER         
                 | "%true" | "%false"  
 
-?flexible_value: | "r{" /.*?/ "}"          
-                 | "%" /.*?/ "%"          
+?flexible_value: | "r{" /.+?/ "}"          
+                 | "%" /.+?/ "%"          
 
 ?collection_value: "s{" ((identifiable_value | logical_value) ("," (identifiable_value | logical_value))*)? "}" 
                  | "j{" (JSON_CONTENT | "^" PATH) "}"    
 
-injected_type: "inj" "." EXTENSION TYPE_NAME STRING
+injected_type: "inj" "." EXTENSION TYPE_NAME IDENTIFIER
 
 group: "$" NAME "$" (datum)* "$$"
 
-identifier: /[a-zA-Z0-9_]+/
-NAME: identifier
+IDENTIFIER: /[a-zA-Z0-9_]+/
+NAME: IDENTIFIER
 PATH: /[^>]+/
-EXTENSION: identifier
-TYPE_NAME: identifier
-STRING: /[^= \n\t\r<>!$]+/  
-JSON_CONTENT: /\{.*?\}/s
+EXTENSION: IDENTIFIER
+TYPE_NAME: IDENTIFIER
+STRING: /'[^= \n\t\r<>!$"']+'/  
+STRCIT_STRING: /"[^= \n\t\r<>!$"]+"/ 
+JSON_CONTENT: /\{.+?\}/s
 
 %import common.WS
 %import common.NUMBER
 %ignore WS
 %ignore "_"
-COMMENT: "|++" /(.|\n)*?/ "++|"
+COMMENT: "|++" /(.|\n)+?/ "++|"
 %ignore COMMENT

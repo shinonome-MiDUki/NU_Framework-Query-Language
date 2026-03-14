@@ -1,0 +1,56 @@
+<-- NUQL 1.0 ncc-->
+
+meta clu 
+<<
+proj_name = "My Wonderland";
+cut_num = @500;
+process = s{'layout', 'keyframe', 'animation'}
+>>
+
+wmeta clu
+<<
+manager = 'tanakataro';
+company = 'mycompany'
+>>
+
+*clu colorcode
+<<
+character = #FFAABB;
+shadow = #BB9090
+>>
+
+clu subcolorcode
+<<
+character = #20AABB;
+shadow = #209090;
+highlight = #EEEEEE
+>>
+
+clu scene1 (colorcode, subcolorcode)
+<<
+layout == #20260101_aa1;
+keyframe == #20260101_bb3;
+animation == #20260101_cc5;
+!shadow == #AA8080
+>>
+
+rejected clu scene2 (*subcolorcode, colorcode, ?scene1)
+|++納期が間に合わなかったらscene1データを転用++|
+|++海外発注++|
+<<
+manager = 'peterchan';
+company = 'biganime';
+layout == #20260101_aa10;
+keyframe == #20260101_bb20;
+animation == #20260101_cc50;
+>>
+
+clu scene3 (subcolorcode)
+<<
+layout == #20260101_ee3;
+keyframe == #20260101_ff7;
+:: diff animation_case1;
+<~~ animation == #20260101_cc5; ~~>
+:: diff animation_case2
+<~~ animation == #20260103_cc5; ~~>
+>>
