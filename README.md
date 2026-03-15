@@ -1,5 +1,6 @@
 # NU Framework Query Language (.nuql) 仕様書
 
+(For English version, please check the README_ENG.md document)
 本ドキュメントは、二方向データ参照と高度な継承管理を目的とした、クラスターベースのクエリ言語 NUQL の正式仕様を定義します。
 
 ---
