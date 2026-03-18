@@ -1,117 +1,116 @@
-# NU Framework Query Language (.nuql) 仕様書
+# NU Framework Query Language (.nuql) Specification
 
-(For English version, please check the README_ENG.md document)
-本ドキュメントは、二方向データ参照と高度な継承管理を目的とした、クラスターベースのクエリ言語 NUQL の正式仕様を定義します。
-
----
-
-## 1. 概念 (Concepts)
-
-- **二方向参照可能:** 従来のキー・バリュー形式に加え、相互参照をサポートします。
-- **継承仕様:** 「プライム」や「ローカル」による優先順位制御が可能な、強力な継承エンジンを備えています。
-- **ユニバーサルアクセス:** いかなるテキストエディタからも編集・閲覧が可能な、人間が読みやすいテキスト形式です。
+This document defines the formal specification for NUQL, a flexible, cluster-based query language designed for bidirectional data referencing and complex inheritance management.
 
 ---
 
-## 2. 参照ペア (Referencable Pair)
+## 1. Core Concepts
 
-データはクラスター内で以下のペアとして保持されます。
-
-- **一方向参照 (`A = B`):** キーから値にアクセスする標準的なルックアップ。
-- **二方向参照 (`A == B`):** キーと値を分けず、どちらからでも反対側を参照可能。
-- **制約:** 左側は値を1つしか持てませんが、右側は複数の値を持ち得ます。
-- **競合ルール:** 重複がある場合、地理的に上にあるもの（ファイル内の位置がより高いもの）を優先します。
+- **Bidirectional Referencing:** Supports both traditional key-value mapping and mutual referencing.
+- **Inheritance Engine:** Features a prioritized inheritance system including "Prime" and "Local" overrides.
+- **Editor Agnostic:** Human-readable text format designed to be accessible from any editing environment.
 
 ---
 
-## 3. クラスター (Cluster)
+## 2. Reference Pairs
 
-データの集合を「クラスター」と呼び、`clu name << ... >>` で定義します。
+Data is stored in pairs within clusters.
 
-- **継承 (Inheritance):** `clu name (parent1, parent2)` の形式で定義します。
-- **競合解決:**
-  - **継承先（子）** は、常に継承元（親）よりも優先されます。
-  - 複数の継承元がある場合、**左側（先に記述されたもの）** を優先します。
-  - 位置的に自分より下にあるクラスターを継承することはできません。
-
----
-
-## 4. プライムクラスター (Prime Cluster)
-
-プライムクラスターは、継承時において高い優先権を持つ上位クラスターです。
-
-- **グローバルプライム (`*clu`):** `*` を付けて定義します。継承の競合時、通常のクラスターよりも優先されます。
-- **ローカルプライム継承:** プライムではないクラスターを、その継承の範囲内のみプライムとして扱うことができます（例: `clu name (*parent1)`）。
-- **プライム同士の競合:** 継承されたプライムクラスター間で競合する場合、先に継承されたものが優先されます。
+- **One-way Reference (`A = B`):** A standard key-to-value lookup.
+- **Two-way Reference (`A == B`):** Both sides can act as a key to reference the other.
+- **Constraint:** The left side must be a single value, whereas the right side can contain multiple values.
+- **Collision Policy:** In the event of duplicate keys, the topmost definition (geographically higher in the file) takes precedence.
 
 ---
 
-## 5. 保護データ (Protected Datum)
+## 3. Clusters (`clu`)
 
-- **定義:** `! Key = Value` のように `!` を付与します。
-- **挙動:** いかなる継承によっても上書きされないことが保証されます。
-- **内部優先順位:** 同一クラスター内で重複がある場合は、通常通り「上のもの優先」ルールが適用されます。
+A Cluster is a collection of data defined by `clu name << ... >>`.
 
----
-
-## 6. 外部参照と追記 (Inclusion)
-
-- **外部参照 (include):** `<include path>` を使用し、外部ファイルのクラスターを継承できます。
-- **追記参照 (append/prepend):** 外部ファイルをその場に展開・複製するのと同義です。
-  - `<append path>`: ローカルファイルの末尾に追加。
-  - `<prepend path>`: ローカルファイルの先頭に追加（優先度が高まる可能性がある）。
+- **Inheritance:** Defined as `clu name (parent1, parent2)`.
+- **Conflict Resolution:**
+  - The inheriting cluster (child) always takes precedence over its parents.
+  - Among multiple parents, the leftmost (first defined) takes precedence.
+  - Geographically, a cluster cannot inherit from a cluster defined below it.
 
 ---
 
-## 7. メタクラスター (Meta Cluster)
+## 4. Prime Clusters (`*`)
 
-すべてのクラスターに自動的に継承される特殊なクラスターです。
+Prime clusters represent high-priority data blocks.
 
-- **メタ (`meta`):** 1ファイルにつき1つのみ。保護データを含むすべてのデータに対して絶対的に優先されます。
-- **弱いメタ (`wmeta`):** 複数定義可能。個別に `rejected` キーワードを付けることで自動継承を拒否できます。
-- **スコープ:** メタおよび弱いメタは、外部ファイルから参照（include）することはできません。
-
----
-
-## 8. 分岐クラスター (Branch)
-
-1つのクラスターの中に、複数の差分（バリエーション）を定義できます。
-
-- **定義:** `::name <~~ ... ~~>`。
-- **分岐継承:** 同一クラスター内の分岐同士は互いを継承します。競合時は常に「自分自身」の定義を優先します。
-- **制約:** 分岐クラスターを持つクラスターは、他から継承されることはできません。
+- **Global Prime (`*clu`):** Defined with a leading `*`. In any inheritance conflict, the Prime Cluster takes precedence over standard clusters.
+- **Local Prime Inheritance:** A standard cluster can be treated as a Prime Cluster only within a specific inheritance scope using the syntax `clu name (*parent1)`.
+- **Conflict between Primes:** If multiple Prime clusters conflict, the first one inherited takes precedence.
 
 ---
 
-## 9. ヘッダークラスター (Header Cluster)
+## 5. Protected Data (`!`)
 
-- **定義:** `&clu name << Key1=; Key2==; >>`。
-- **挙動:** キーのみを定義し、値は持ちません。プログラムから値が注入されるまで `None` を返します。
-- **制約:** 他のクラスターを継承することはできません。
-
----
-
-## 10. Lパース (List Parse)
-
-競合時に優先順位に従って「すべての候補をリストとして取得」する機能です。
-
-- **探索領域 (Explore Scope):** プログラム側から探索する範囲（ローカルのみ、あるいは継承先までなど）を制限できます。
+- **Definition:** Prefixed with `!`, e.g., `! Key = Value`.
+- **Behavior:** Protected data cannot be overwritten by any inheritance-based values.
+- **Internal Priority:** If two protected entries exist within the same cluster, the topmost rule applies.
 
 ---
 
-## 11. 型とグループ (Types & Groups)
+## 6. Inclusion and External References
 
-- **一方向参照の型:** 文字列（無印）、識別子 (`#id`)。
-- **二方向参照の型:** 文字列、識別子、整数/小数 (`@`)、真偽値 (`%true`/`%false`)、集合 (`s{}`)、JSON (`j{}`)、正規表現 (`r{}`)、fstring (`%x%`)。
-- **グループ:** `$name$ ... $$`。読み取りは不可ですが、配下のデータに対する一括処理の参照口として機能します。
-- **サイドウェイ (`/`):** 参照ペアやグループを書き込み不可能（イミュータブル）に設定します。
+- **External Inclusion:** `<include path>` allows a cluster to inherit from an external file.
+- **Pending Inclusion:**
+  - `<append path>`: Merges external content at the end of the local file.
+  - `<prepend path>`: Merges external content at the beginning of the local file (giving it potential priority).
 
 ---
 
-## 12. 構文要件 (Syntax)
+## 7. Meta Clusters (`meta` / `wmeta`)
 
-- **フォーマット:** 空白、タブ、改行は無視されます。
-- **区切り:** アンダースコア (`_`) は無視されます（可読性のために使用可能）。
-- **格文字制限:** 原則として大文字・小文字を区別しません。先頭に `<--NUQL 1.0 cc-->` を記述することで、Case Sensitive モードに変更可能です。
-- **コメント:** `|++ xxx ++|` で囲みます。
-- **ネスト:** クラスターのネストは認められません。
+Special clusters that are automatically inherited by all other clusters.
+
+- **Meta (`meta`):** Only one per file. Absolute priority over all data, including protected entries.
+- **Weak Meta (`wmeta`):** Multiple allowed. Can be excluded by individual clusters using the `rejected` keyword.
+- **Scope:** Meta clusters cannot be referenced or accessed from external files.
+
+---
+
+## 8. Branch Clusters (`::`)
+
+A cluster can define internal variants called Branches.
+
+- **Definition:** `::name <~~ ... ~~>`.
+- **Differential Inheritance:** Branches within the same cluster inherit from each other. In conflicts, the current branch's local data always wins.
+- **Restriction:** Clusters containing branches cannot be inherited by other clusters.
+
+---
+
+## 9. Header Clusters (`&`)
+
+- **Definition:** `&clu name << Key1=; Key2==; >>`.
+- **Behavior:** Defines keys without values. Values must be injected via a program. Until then, they return `None`.
+- **Restriction:** Header clusters cannot inherit from other clusters.
+
+---
+
+## 10. List Parse (L-Parse)
+
+A query mode that returns all conflicting values as a prioritized list instead of a single value.
+
+- **Explore Scope:** The API can restrict how deep the search goes (e.g., local-only or specific inheritance levels).
+
+---
+
+## 11. Data Types and Groups
+
+- **One-way Reference:** Supports `string` and `identifier` (`#id`).
+- **Two-way Reference:** Supports `string`, `id`, `integer` (`@`), `float` (`@`), `bool` (`%true`), `set` (`s{}`), `JSON` (`j{}`), `regex` (`r{}`), and `fstring` (`%x%`).
+- **Groups:** `$name$ ... $$`. A non-readable logical grouping for batch processing commands.
+- **Sideway (`/`):** Marks data or groups as read-only (immutable).
+
+---
+
+## 12. Syntax Requirements
+
+- **Formatting:** Whitespace, tabs, and newlines are ignored.
+- **Separators:** Underscores (`_`) are ignored (used for readability).
+- **Case Sensitivity:** Defaults to insensitive. Use `<--NUQL 1.0 cc-->` at the file header to enable Case Sensitivity.
+- **Comments:** Wrapped in `|++ comment ++|`.
+- **Nesting:** No cluster nesting allowed.
